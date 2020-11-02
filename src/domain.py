@@ -1,46 +1,43 @@
-from typing import List, Dict
-
+from typing import List, Dict, Tuple
 import requests
 
 
 class Domains(object):
-    def __init__(self, use_proxy=False):
-        self._today_url = 'http://www.cnnic.cn/download/registar_list/1todayDel.txt'
-        self._tomorrow_url = 'http://www.cnnic.cn/download/registar_list/future1todayDel.txt'
-        self._next_tomorrow_url = 'http://www.cnnic.cn/download/registar_list/future2todayDel.txt'
-        self._headers = {
-            'User-Agent': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)'
-        }
-        self.use_proxy = use_proxy
-        self._proxies = {
-            "http": "http://127.0.0.1:2020",
-            "https": "http://127.0.0.1:2020",
-        }
-        self._today_domains: List = self.download(self._today_url)
-        self._tomorrow_domains: List = self.download(self._tomorrow_url)
-        self._next_tomorrow_domains: List = self.download(self._next_tomorrow_url)
+    urls = [
+        'http://www.cnnic.cn/download/registar_list/1todayDel.txt',
+        'http://www.cnnic.cn/download/registar_list/future1todayDel.txt',
+        'http://www.cnnic.cn/download/registar_list/future2todayDel.txt'
+    ]
+    headers = {
+        'User-Agent': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)'
+    }
+    proxies = {
+        "http": "http://127.0.0.1:2020",
+        "https": "http://127.0.0.1:2020",
+    }
+    register = 'http://panda.www.net.cn/cgi-bin/check.cgi?area_domain={domain}'
 
-    def get_today_domains(self, max_length=10):
-        return self._get_domains(domains=self._today_domains, max_length=max_length)
+    def __init__(self, date: Tuple = (0, 1, 2), file: str = None, proxy: Dict = None) -> None:
+        """
+        :param date: 需要获取的日期，0，1，2 表示今天，明天，后天删除
+        :param file: 读入域名的文件地址
+        :param proxy: 获取历史记录的所需的代理
+        """
+        self._urls = self.urls
+        self._headers = self.headers
+        self._domains: set = set()
+        if file:
+            with open(file=file, mode='r') as f:
+                self._domains.update([d.strip() for d in f.readlines()])
+        for day in date:
+            self._download(self._urls[day])
 
-    def get_tomorrow_domains(self, max_length=10):
-        return self._get_domains(domains=self._tomorrow_domains, max_length=max_length)
+        self._proxies = proxy if proxy else self.proxies
+        self._register = self.register
 
-    def get_next_tomorrow_domains(self, max_length=10):
-        return self._get_domains(domains=self._next_tomorrow_domains, max_length=max_length)
-
-    @staticmethod
-    def _get_domains(domains: List, max_length: int):
-        tmp_domains: List = [domain for domain in domains if len(domain) < max_length + 4]
-        tmp_domains.sort()
-        return tmp_domains
-
-    def download(self, url) -> list:
+    def _download(self, url) -> None:
         try:
-            if self.use_proxy:
-                response = requests.get(url=url, headers=self._headers, proxies=self._proxies, verify=False)
-            else:
-                response = requests.get(url=url, headers=self._headers, verify=False)
+            response = requests.get(url=url, headers=self._headers, verify=False)
             domains = [
                 item[1:-1]
                 for item
@@ -48,18 +45,29 @@ class Domains(object):
                 if item[1:-4].isalpha() and item.count('.') == 1
             ]
         except requests.exceptions.RequestException:
-            return self.download(url=url)
+            self._download(url=url)
         else:
-            return domains
+            self._domains.update(domains)
 
-    def set_proxies(self, proxy: Dict):
-        """
-        :param proxy: 支持 str 和 dict
-        :return: None
-        """
-        if isinstance(proxy, str):
-            protocol, _ = proxy.split(':', maxsplit=1)
-            proxy: Dict = {
-                protocol: proxy
-            }
+    def set_proxy(self, proxy: Dict):
         self._proxies = proxy
+
+    def filter(self, lengths: List) -> None:
+        """
+        :param lengths: len(test.cn) -> 7
+        """
+        _domains = [d for d in self._domains if len(d) in lengths]
+        self._domains.clear()
+        self._domains.update(_domains)
+
+    def check_register(self):
+        for d in self._domains.copy():
+            if not self._is_registered(d):
+                self._domains.remove(d)
+
+    def _is_registered(self, d):
+        try:
+            res = requests.get(self._register.format(domain=d))
+            return '210' in res.text
+        except requests.exceptions.RequestException:
+            return self._is_registered(d)

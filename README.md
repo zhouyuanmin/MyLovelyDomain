@@ -22,3 +22,19 @@
 
 - 可以检测被墙、QQ拦截、微信拦截：[link114](http://www.link114.cn/)
 
+四、检测是否注册
+
+-  [API接口]( http://panda.www.net.cn/cgi-bin/check.cgi?area_domain={domain})
+
+- ```
+  # 响应内容:状态为 211 表示域名已经被注册，状态为 210 表示域名可以注册。
+  <?xml version="1.0" encoding="gb2312"?>
+  <property>
+  <returncode>200</returncode>
+  <key>itdhz.com</key>
+  <original>211 : Domain exists</original>
+  </property>
+  ```
+
+  
+
